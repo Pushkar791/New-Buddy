@@ -555,10 +555,66 @@
                                 <div class="scan-point"></div>
                             </div>
                         </div>
+                        
+                        <!-- Enhanced Face Detection Frame -->
+                        <div class="face-detection-frame">
+                            <div class="corner top-left"></div>
+                            <div class="corner top-right"></div>
+                            <div class="corner bottom-left"></div>
+                            <div class="corner bottom-right"></div>
+                            <div class="scanning-effect"></div>
+                        </div>
+                        
+                        <!-- Face Status Indicators -->
+                        <div class="face-status-container">
+                            <div class="face-status-indicator">
+                                <div class="status-dot"></div>
+                                <div class="status-text">Looking for face</div>
+                            </div>
+                            <div class="face-positioning-guide">
+                                <p>Position your face in the center of the frame</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Facial Features Detection Points -->
+                        <div class="facial-features-points">
+                            <div class="feature-point" data-point="left-eye"></div>
+                            <div class="feature-point" data-point="right-eye"></div>
+                            <div class="feature-point" data-point="nose"></div>
+                            <div class="feature-point" data-point="mouth"></div>
+                            <div class="feature-point" data-point="left-cheek"></div>
+                            <div class="feature-point" data-point="right-cheek"></div>
+                        </div>
                     </div>
                     <button id="start-emotion-tracking" class="btn btn-primary">Start Emotion Tracking</button>
                     <div id="emotion-result"></div>
                     <div id="therapy-suggestion" style="display: none;"></div>
+                    
+                    <!-- Enhanced Emotion Analysis Indicator -->
+                    <div class="emotion-analysis-progress">
+                        <div class="analysis-stage-container">
+                            <div class="analysis-stage" data-stage="face-detection">
+                                <div class="stage-icon"><i class="fas fa-user"></i></div>
+                                <div class="stage-label">Face Detection</div>
+                                <div class="stage-status"></div>
+                            </div>
+                            <div class="analysis-stage" data-stage="feature-mapping">
+                                <div class="stage-icon"><i class="fas fa-map-marker-alt"></i></div>
+                                <div class="stage-label">Feature Mapping</div>
+                                <div class="stage-status"></div>
+                            </div>
+                            <div class="analysis-stage" data-stage="emotion-analysis">
+                                <div class="stage-icon"><i class="fas fa-brain"></i></div>
+                                <div class="stage-label">Emotion Analysis</div>
+                                <div class="stage-status"></div>
+                            </div>
+                            <div class="analysis-stage" data-stage="result">
+                                <div class="stage-icon"><i class="fas fa-chart-bar"></i></div>
+                                <div class="stage-label">Results</div>
+                                <div class="stage-status"></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

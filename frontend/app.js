@@ -546,168 +546,299 @@ function showAppointmentPopup() {
     }
 }
 
-// Emotion Tracking
+// Initialize Emotion Tracking
 function initEmotionTracking() {
-    const video = document.getElementById('emotion-video');
     const startButton = document.getElementById('start-emotion-tracking');
+    const videoElement = document.getElementById('emotion-video');
     const videoContainer = document.querySelector('.video-container');
     const resultElement = document.getElementById('emotion-result');
     
+    // Face detection elements
+    const faceDetectionFrame = document.querySelector('.face-detection-frame');
+    const statusDot = document.querySelector('.status-dot');
+    const statusText = document.querySelector('.status-text');
+    const positioningGuide = document.querySelector('.face-positioning-guide');
+    const featurePoints = document.querySelectorAll('.feature-point');
+    const analysisProgress = document.querySelector('.emotion-analysis-progress');
+    const analysisStages = document.querySelectorAll('.analysis-stage');
+    
+    let stream = null;
     let emotionDetectionActive = false;
-    let fakeEmotions = ['happy', 'neutral', 'focused', 'relaxed', 'tired', 'stressed'];
     let lastDetectedEmotion = null;
-    let faceDetected = false;
+    let faceDetectionTimeout = null;
+    let analysisTimeout = null;
     
-    // Create face target overlay
-    const faceTargetOverlay = document.createElement('div');
-    faceTargetOverlay.className = 'face-target-overlay';
+    // Sample list of emotions for testing
+    const fakeEmotions = ['happy', 'relaxed', 'focused', 'tired', 'stressed', 'neutral'];
     
-    const faceTargetBox = document.createElement('div');
-    faceTargetBox.className = 'face-target-box';
+    // Start camera function
+    async function startCamera() {
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { 
+                    width: { ideal: 640 },
+                    height: { ideal: 480 },
+                    facingMode: 'user'
+                } 
+            });
+            videoElement.srcObject = stream;
+            return new Promise((resolve) => {
+                videoElement.onloadeddata = () => {
+                    resolve();
+                };
+            });
+        } catch (error) {
+            console.error('Error accessing camera:', error);
+            throw error;
+        }
+    }
     
-    const noFaceMessage = document.createElement('div');
-    noFaceMessage.className = 'no-face-message';
-    noFaceMessage.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Position your face in the box';
+    // Stop camera function
+    function stopCamera() {
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+            videoElement.srcObject = null;
+        }
+        // Clear any running analysis
+        if (faceDetectionTimeout) {
+            clearTimeout(faceDetectionTimeout);
+        }
+        if (analysisTimeout) {
+            clearTimeout(analysisTimeout);
+        }
+        
+        // Reset UI
+        videoContainer.classList.add('inactive');
+        
+        // Hide face detection elements
+        faceDetectionFrame.classList.remove('active');
+        statusDot.classList.remove('detected');
+        statusText.textContent = 'Looking for face';
+        positioningGuide.classList.remove('show');
+        featurePoints.forEach(point => point.classList.remove('active'));
+        analysisProgress.classList.remove('active');
+        resetAnalysisStages();
+    }
     
-    const faceDetectedMessage = document.createElement('div');
-    faceDetectedMessage.className = 'face-detected-message';
-    faceDetectedMessage.innerHTML = '<i class="fas fa-check-circle"></i> Face detected';
-    
-    faceTargetOverlay.appendChild(faceTargetBox);
-    faceTargetOverlay.appendChild(noFaceMessage);
-    faceTargetOverlay.appendChild(faceDetectedMessage);
-    
-    // Append to video container
-    videoContainer.appendChild(faceTargetOverlay);
-    
-    // Demo mode for emotion detection (simulating AI without actual implementation)
+    // Simulate emotion detection for demo
     function simulateEmotionDetection() {
         if (!emotionDetectionActive) return;
         
-        // Start the scanning animation
-        videoContainer.classList.add('scanning');
+        // Create canvas for image processing
+        const canvas = document.createElement('canvas');
+        const videoWidth = videoElement.videoWidth;
+        const videoHeight = videoElement.videoHeight;
+        canvas.width = videoWidth;
+        canvas.height = videoHeight;
         
-        // Simulate processing time
-        setTimeout(() => {
-            if (!emotionDetectionActive) return;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+        
+        // Step 1: Show face detection stage
+        startAnalysis();
+        
+        // Step 2: Detect if a face is in frame
+        const faceDetected = detectFace(canvas, ctx);
+        
+        if (faceDetected) {
+            // Update the face frame and status indicators
+            updateFaceDetectionUI(true);
             
-            // Create a canvas to capture video frame
-            const canvas = document.createElement('canvas');
-            canvas.width = video.videoWidth || 320;
-            canvas.height = video.videoHeight || 240;
-            const ctx = canvas.getContext('2d');
-            
-            // Draw video frame to canvas if video is active
-            if (video.srcObject) {
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                
-                // Check if a face is detected in the frame
-                detectFace(canvas, ctx);
-                
-                if (faceDetected) {
-                    // Basic facial analysis simulation based on pixels
-                    // This is not real facial recognition but provides more variety in the demo
-                    analyzeFaceAndDetectEmotion(canvas, ctx);
-                } else {
-                    // No face detected
-                    showNoFaceDetected();
-                }
-            } else {
-                // Fallback to random emotion if no camera
-                const randomEmotion = fakeEmotions[Math.floor(Math.random() * fakeEmotions.length)];
-                displayDetectedEmotion(randomEmotion);
-            }
-            
-            // Start a new detection cycle after a delay
+            // Wait a moment then proceed with feature mapping
             setTimeout(() => {
+                // Step 3: Show feature mapping stage
+                advanceAnalysisStage('feature-mapping');
+                
+                // Activate feature points with slight delay between each
+                activateFeaturePoints();
+                
+                // Wait a moment then proceed with emotion analysis
+                setTimeout(() => {
+                    // Step 4: Show emotion analysis stage
+                    advanceAnalysisStage('emotion-analysis');
+                    
+                    // Actually analyze the face and expression
+                    analyzeFaceAndDetectEmotion(canvas, ctx);
+                    
+                    // Complete the analysis stages
+                    setTimeout(() => {
+                        advanceAnalysisStage('result');
+                        
+                        // Wait before next scan
+                        analysisTimeout = setTimeout(() => {
+                            if (emotionDetectionActive) {
+                                resetAnalysisStages();
+                                videoContainer.classList.add('scanning');
+                                simulateEmotionDetection();
+                            }
+                        }, 3000);
+                    }, 1000);
+                }, 1500);
+            }, 1000);
+        } else {
+            // Update UI to show no face detected
+            updateFaceDetectionUI(false);
+            
+            // Try again after a short delay
+            faceDetectionTimeout = setTimeout(() => {
                 if (emotionDetectionActive) {
+                    resetAnalysisStages();
                     videoContainer.classList.add('scanning');
-                    setTimeout(simulateEmotionDetection, 3000); // Continue detection cycle
+                    simulateEmotionDetection();
                 }
-            }, 5000);
-        }, 3000); // Simulate 3 second processing time
+            }, 1000);
+        }
     }
     
-    // Detect if a face is in the frame
+    // Start the analysis UI flow
+    function startAnalysis() {
+        // Show the analysis progress
+        analysisProgress.classList.add('active');
+        
+        // Set first stage as active
+        const firstStage = document.querySelector('.analysis-stage[data-stage="face-detection"]');
+        firstStage.classList.add('active');
+    }
+    
+    // Advance to the next analysis stage
+    function advanceAnalysisStage(stageName) {
+        // Complete the previous stage
+        const activeStage = document.querySelector('.analysis-stage.active');
+        if (activeStage) {
+            activeStage.classList.remove('active');
+            activeStage.classList.add('completed');
+        }
+        
+        // Activate the next stage
+        const nextStage = document.querySelector(`.analysis-stage[data-stage="${stageName}"]`);
+        if (nextStage) {
+            nextStage.classList.add('active');
+        }
+    }
+    
+    // Reset all analysis stages
+    function resetAnalysisStages() {
+        analysisStages.forEach(stage => {
+            stage.classList.remove('active', 'completed');
+        });
+        analysisProgress.classList.remove('active');
+    }
+    
+    // Activate feature points with a cascading effect
+    function activateFeaturePoints() {
+        featurePoints.forEach((point, index) => {
+            setTimeout(() => {
+                point.classList.add('active');
+            }, index * 200); // Stagger the activation
+        });
+    }
+    
+    // Update face detection UI based on detection status
+    function updateFaceDetectionUI(detected) {
+        if (detected) {
+            faceDetectionFrame.classList.add('active');
+            statusDot.classList.add('detected');
+            statusText.textContent = 'Face detected';
+            positioningGuide.classList.remove('show');
+        } else {
+            faceDetectionFrame.classList.remove('active');
+            statusDot.classList.remove('detected');
+            statusText.textContent = 'Looking for face';
+            positioningGuide.classList.add('show');
+            featurePoints.forEach(point => point.classList.remove('active'));
+        }
+    }
+    
+    // Improved face detection algorithm
     function detectFace(canvas, ctx) {
-        // Get center portion of the image where a face would be expected
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        
+        // Store previous frame for motion detection
+        const previousFrame = window.previousFrameData || null;
+        window.previousFrameData = new Uint8ClampedArray(data);
+        
+        // Enhanced face detection using skin tone detection, feature analysis, and motion
+        
+        // 1. Analyze center region where face likely is
         const centerWidth = Math.floor(canvas.width * 0.6);
         const centerHeight = Math.floor(canvas.height * 0.6);
         const startX = Math.floor((canvas.width - centerWidth) / 2);
         const startY = Math.floor((canvas.height - centerHeight) / 2);
         
-        const imageData = ctx.getImageData(startX, startY, centerWidth, centerHeight);
-        const data = imageData.data;
+        const centerRegion = ctx.getImageData(startX, startY, centerWidth, centerHeight);
+        const centerData = centerRegion.data;
         
-        // Simple face detection simulation
-        // In a real implementation, this would use a ML model for face detection
-        
-        // Calculate average brightness and color variation
-        // A face typically has significant variation in brightness
-        let totalBrightness = 0;
-        let variationSum = 0;
-        let lastBrightness = 0;
-        
-        for (let i = 0; i < data.length; i += 4) {
-            const brightness = (data[i] + data[i+1] + data[i+2]) / 3;
-            totalBrightness += brightness;
-            
-            if (i > 0) {
-                variationSum += Math.abs(brightness - lastBrightness);
-            }
-            
-            lastBrightness = brightness;
-        }
-        
-        const avgBrightness = totalBrightness / (data.length / 4);
-        const variation = variationSum / (data.length / 4);
-        
-        // Check skin tone range (very simplified)
+        // 2. Check for skin tones in the center region
         let skinTonePixels = 0;
-        for (let i = 0; i < data.length; i += 4) {
-            const r = data[i];
-            const g = data[i+1];
-            const b = data[i+2];
+        let totalPixels = centerData.length / 4;
+        
+        for (let i = 0; i < centerData.length; i += 4) {
+            const r = centerData[i];
+            const g = centerData[i + 1];
+            const b = centerData[i + 2];
             
-            // Expanded skin tone detection - more inclusive of different skin tones
-            // We're looking for pixels where red channel is prominent (characteristic of skin)
-            // but also accounting for various lighting conditions
-            const isLikelySkin = (
-                // Light to medium skin tones
-                (r > g && r > b && r > 60 && r < 250 && g > 40 && g < 220 && b > 20 && b < 180)
-                ||
-                // Darker skin tones
-                (r > 50 && r < 200 && g > 30 && g < 170 && b > 20 && b < 150 && r > b && Math.abs(r - g) < 40)
-                ||
-                // Very light skin tones in bright lighting
-                (r > 180 && g > 140 && b > 100 && r > b && (r - b) > 10)
+            // Improved skin tone detection (various skin tones)
+            const isSkin = (
+                // Light skin tones
+                (r > 60 && g > 40 && b > 20 && 
+                 r > g && r > b && 
+                 r - g > 15 && g - b > 15 && r - b > 30) ||
+                // Medium skin tones
+                (r > 95 && g > 40 && b > 20 && 
+                 r > g && r > b) ||
+                // Dark skin tones
+                (r > 30 && g > 20 && b > 10 && 
+                 r > g && r > b)
             );
             
-            if (isLikelySkin) {
+            if (isSkin) {
                 skinTonePixels++;
             }
         }
         
-        const skinTonePercentage = (skinTonePixels / (data.length / 4)) * 100;
+        const skinTonePercentage = (skinTonePixels / totalPixels) * 100;
         
-        // Add more checks to detect presence of movement
-        const hasMovement = window.previousFrameData && detectMotion(data, window.previousFrameData) > 2;
+        // 3. Check for brightness variation (face features create variance)
+        let totalBrightness = 0;
+        for (let i = 0; i < centerData.length; i += 4) {
+            totalBrightness += (centerData[i] + centerData[i+1] + centerData[i+2]) / 3;
+        }
+        const avgBrightness = totalBrightness / totalPixels;
         
-        console.log(`Brightness: ${avgBrightness.toFixed(2)}, Variation: ${variation.toFixed(2)}, Skin: ${skinTonePercentage.toFixed(2)}%, Movement: ${hasMovement}`);
+        let brightnessVariation = 0;
+        for (let i = 0; i < centerData.length; i += 4) {
+            const pixelBrightness = (centerData[i] + centerData[i+1] + centerData[i+2]) / 3;
+            brightnessVariation += Math.abs(pixelBrightness - avgBrightness);
+        }
+        const variation = brightnessVariation / totalPixels;
         
-        // More relaxed face detection criteria
-        // Consider a face detected if either:
-        // 1. There's sufficient skin tone percentage and some brightness variation
-        // 2. There's high brightness variation (indicating facial features) even with lower skin tone detection
-        // 3. There's clear movement and some skin tone detected (person moving in frame)
+        // 4. Detect motion if we have a previous frame
+        let hasMovement = false;
+        let motionLevel = 0;
+        
+        if (previousFrame && previousFrame.length === data.length) {
+            motionLevel = detectMotion(data, previousFrame);
+            hasMovement = motionLevel > 5;
+        }
+        
+        // 5. Combination of factors to determine if a face is present
+        // Improved detection logic
+        let faceDetected = false;
+        
+        // Criteria for face detection:
+        // 1. High skin tone percentage and decent brightness variation
+        // 2. Very high brightness variation (indicating facial features)
+        // 3. Clear movement with some skin tone detected (person moving in frame)
+        // 4. Lower thresholds for all factors but all must be present
         faceDetected = (
-            (skinTonePercentage > 5 && variation > 2) || 
-            (variation > 8) || 
-            (hasMovement && skinTonePercentage > 3)
+            (skinTonePercentage > 10 && variation > 5) || 
+            (variation > 12) || 
+            (hasMovement && skinTonePercentage > 7) ||
+            (skinTonePercentage > 5 && variation > 3 && hasMovement)
         );
         
-        // Update face target box
-        updateFaceTargetBox(faceDetected);
+        console.log(`Face detection: Skin: ${skinTonePercentage.toFixed(1)}%, Variation: ${variation.toFixed(1)}, Motion: ${motionLevel.toFixed(1)}, Detected: ${faceDetected}`);
         
         return faceDetected;
     }
@@ -721,55 +852,27 @@ function initEmotionTracking() {
         let motionScore = 0;
         let diffPixels = 0;
         
-        // Sample only a portion of pixels for performance
-        for (let i = 0; i < currentFrame.length; i += 20) {
+        // More efficient sampling (every 12 pixels)
+        for (let i = 0; i < currentFrame.length; i += 12) {
             const diff = Math.abs(currentFrame[i] - previousFrame[i]) + 
                          Math.abs(currentFrame[i+1] - previousFrame[i+1]) + 
                          Math.abs(currentFrame[i+2] - previousFrame[i+2]);
             
-            if (diff > 30) { // Threshold for significant change
+            if (diff > 25) { // Lower threshold for detecting subtle movements
                 diffPixels++;
                 motionScore += diff;
             }
         }
         
-        const sampledPixels = currentFrame.length / 20;
+        const sampledPixels = currentFrame.length / 12;
         return (motionScore / sampledPixels) * (diffPixels / sampledPixels);
     }
     
-    // Update the face target box UI based on face detection
-    function updateFaceTargetBox(faceDetected) {
-        if (faceDetected) {
-            faceTargetBox.classList.add('face-detected');
-            noFaceMessage.classList.remove('visible');
-            faceDetectedMessage.classList.add('visible');
-        } else {
-            faceTargetBox.classList.remove('face-detected');
-            noFaceMessage.classList.add('visible');
-            faceDetectedMessage.classList.remove('visible');
-        }
-    }
-    
-    // Show no face detected message
-    function showNoFaceDetected() {
-        // Stop the scanning animation
-        videoContainer.classList.remove('scanning');
-        
-        // Clear any previous emotion results
-        resultElement.classList.remove('show');
-        document.getElementById('therapy-suggestion').style.display = 'none';
-        
-        // Show the no face detected message
-        faceTargetBox.classList.remove('face-detected');
-        noFaceMessage.classList.add('visible');
-    }
-    
-    // Simulated facial analysis for demo purposes
+    // Improved facial analysis for emotion detection
     function analyzeFaceAndDetectEmotion(canvas, ctx) {
         // Get image data from the center portion of the frame
-        // This is where a face would likely be
-        const centerWidth = Math.floor(canvas.width / 2);
-        const centerHeight = Math.floor(canvas.height / 2);
+        const centerWidth = Math.floor(canvas.width * 0.6);
+        const centerHeight = Math.floor(canvas.height * 0.6);
         const startX = Math.floor((canvas.width - centerWidth) / 2);
         const startY = Math.floor((canvas.height - centerHeight) / 2);
         
@@ -780,10 +883,9 @@ function initEmotionTracking() {
         const previousFrame = window.previousFrameData;
         window.previousFrameData = new Uint8ClampedArray(data);
         
-        // Calculate average brightness as a primitive face detection
+        // Calculate brightness statistics
         let totalBrightness = 0;
         for (let i = 0; i < data.length; i += 4) {
-            // Average RGB for brightness
             totalBrightness += (data[i] + data[i+1] + data[i+2]) / 3;
         }
         const avgBrightness = totalBrightness / (data.length / 4);
@@ -796,104 +898,121 @@ function initEmotionTracking() {
         }
         const contrast = contrastSum / (data.length / 4);
         
-        // Analyze top half and bottom half separately (eyes vs mouth)
-        const halfPoint = Math.floor(centerHeight / 2);
-        const topHalf = ctx.getImageData(startX, startY, centerWidth, halfPoint);
-        const bottomHalf = ctx.getImageData(startX, startY + halfPoint, centerWidth, halfPoint);
+        // Analyze facial regions separately
+        const thirdHeight = Math.floor(centerHeight / 3);
         
-        // Calculate top and bottom brightness
-        let topBrightness = 0;
-        for (let i = 0; i < topHalf.data.length; i += 4) {
-            topBrightness += (topHalf.data[i] + topHalf.data[i+1] + topHalf.data[i+2]) / 3;
-        }
-        topBrightness = topBrightness / (topHalf.data.length / 4);
+        // Upper region (eyes, forehead)
+        const upperRegion = ctx.getImageData(startX, startY, centerWidth, thirdHeight);
+        // Middle region (nose, cheeks)
+        const middleRegion = ctx.getImageData(startX, startY + thirdHeight, centerWidth, thirdHeight);
+        // Lower region (mouth, chin)
+        const lowerRegion = ctx.getImageData(startX, startY + 2 * thirdHeight, centerWidth, thirdHeight);
         
-        let bottomBrightness = 0;
-        for (let i = 0; i < bottomHalf.data.length; i += 4) {
-            bottomBrightness += (bottomHalf.data[i] + bottomHalf.data[i+1] + bottomHalf.data[i+2]) / 3;
-        }
-        bottomBrightness = bottomBrightness / (bottomHalf.data.length / 4);
+        // Calculate region brightnesses
+        const upperBrightness = calculateRegionBrightness(upperRegion.data);
+        const middleBrightness = calculateRegionBrightness(middleRegion.data);
+        const lowerBrightness = calculateRegionBrightness(lowerRegion.data);
+        
+        // Calculate brightness ratios between regions
+        const upperToLowerRatio = upperBrightness / lowerBrightness;
+        const middleToLowerRatio = middleBrightness / lowerBrightness;
         
         // Detect motion if we have a previous frame
         let motionLevel = 0;
         if (previousFrame && previousFrame.length === data.length) {
-            let totalDiff = 0;
-            for (let i = 0; i < data.length; i += 4) {
-                // Calculate difference for RGB channels
-                totalDiff += Math.abs(data[i] - previousFrame[i]);
-                totalDiff += Math.abs(data[i+1] - previousFrame[i+1]);
-                totalDiff += Math.abs(data[i+2] - previousFrame[i+2]);
-            }
-            motionLevel = totalDiff / (data.length * 3/4);
+            motionLevel = calculateMotionLevel(data, previousFrame);
         }
         
-        // Primitive emotion detection based on brightness, contrast and motion
+        // Log values for debugging
+        console.log(`Emotion Analysis: Upper/Lower: ${upperToLowerRatio.toFixed(2)}, Middle/Lower: ${middleToLowerRatio.toFixed(2)}, Contrast: ${contrast.toFixed(2)}, Motion: ${motionLevel.toFixed(2)}`);
+        
+        // Improved emotion detection based on measurements
         let detectedEmotion;
-        let confidenceLevel = 0; // 0-100, higher means more confident in the detected emotion
+        let confidenceLevel = 0;
         
-        console.log(`Bottom/Top: ${(bottomBrightness/topBrightness).toFixed(2)}, Contrast: ${contrast.toFixed(2)}, Motion: ${motionLevel.toFixed(2)}`);
-        
-        // Detect specific emotions based on features
-        
-        // Smiling (higher brightness in bottom half of face)
-        if (bottomBrightness > topBrightness * 1.08) {
+        // Smiling detection (higher brightness in lower face relative to upper face)
+        if (lowerBrightness > upperBrightness * 1.05 && middleBrightness > upperBrightness * 1.03) {
             detectedEmotion = 'happy';
-            confidenceLevel = Math.min(100, 50 + ((bottomBrightness/topBrightness - 1.08) * 200));
+            confidenceLevel = Math.min(100, 60 + ((lowerBrightness/upperBrightness - 1.05) * 300));
         } 
-        // Rapid motion can indicate stress
-        else if (motionLevel > 15) {
+        // Stress detection (high motion + higher contrast)
+        else if (motionLevel > 12 && contrast > 20) {
             detectedEmotion = 'stressed';
-            confidenceLevel = Math.min(100, motionLevel * 3);
+            confidenceLevel = Math.min(100, 60 + (motionLevel - 12) * 4);
         }
-        // Moderate motion can indicate focus or concentration
-        else if (motionLevel > 8) {
+        // Focus/concentration (moderate contrast with lower motion)
+        else if (contrast > 18 && motionLevel < 10 && motionLevel > 2) {
             detectedEmotion = 'focused';
-            confidenceLevel = Math.min(100, motionLevel * 5);
+            confidenceLevel = Math.min(100, 60 + (contrast - 18) * 3);
         }
-        // High contrast could indicate an expressive face
-        else if (contrast > 25) {
-            // More brightness in bottom half slightly but high contrast = focused
-            if (bottomBrightness > topBrightness * 1.02) {
-                detectedEmotion = 'focused';
-            } else {
-                detectedEmotion = 'stressed';
-            }
-            confidenceLevel = Math.min(100, contrast * 2);
-        }
-        // Low brightness overall could indicate tiredness
-        else if (avgBrightness < 110) {
+        // Tiredness (low brightness + low motion)
+        else if (avgBrightness < 100 && motionLevel < 8) {
             detectedEmotion = 'tired';
-            confidenceLevel = Math.min(100, (110 - avgBrightness) * 2);
+            confidenceLevel = Math.min(100, 60 + (100 - avgBrightness) / 2);
         }
-        // Very little motion and moderate contrast = relaxed
-        else if (motionLevel < 5 && contrast < 20) {
+        // Relaxed state (low motion, moderate brightness, balanced facial regions)
+        else if (motionLevel < 5 && Math.abs(upperToLowerRatio - 1) < 0.15) {
             detectedEmotion = 'relaxed';
-            confidenceLevel = Math.min(100, 80 - (motionLevel * 5));
+            confidenceLevel = Math.min(100, 70 - (motionLevel * 5));
         }
-        // Default fallback
+        // Neutral state (fallback)
         else {
-            const possibleEmotions = ['neutral', 'relaxed', 'focused'];
-            detectedEmotion = possibleEmotions[Math.floor(Math.random() * possibleEmotions.length)];
-            confidenceLevel = 50; // Medium confidence
+            detectedEmotion = 'neutral';
+            confidenceLevel = 60;
         }
         
-        // Add some variety - don't show the same emotion consecutively unless high confidence
-        if (detectedEmotion === lastDetectedEmotion && confidenceLevel < 70) {
-            const otherEmotions = fakeEmotions.filter(e => e !== detectedEmotion);
-            const newEmotion = otherEmotions[Math.floor(Math.random() * otherEmotions.length)];
-            console.log(`Changing from ${detectedEmotion} to ${newEmotion} for variety (confidence was ${confidenceLevel})`);
-            detectedEmotion = newEmotion;
+        // Add randomness for demo purposes, but prioritize stress detection
+        if (detectedEmotion === lastDetectedEmotion && confidenceLevel < 75 && detectedEmotion !== 'stressed') {
+            // 50% chance to change to a different emotion
+            if (Math.random() > 0.5) {
+                const otherEmotions = fakeEmotions.filter(e => e !== detectedEmotion);
+                // Higher chance of stress when changing
+                const stressChance = Math.random() < 0.3; // 30% chance of stress
+                detectedEmotion = stressChance ? 'stressed' : otherEmotions[Math.floor(Math.random() * otherEmotions.length)];
+                confidenceLevel = Math.floor(40 + Math.random() * 30); // Random confidence between 40-70
+            }
         }
         
-        // Store this emotion to avoid repetition
+        // Store emotion to avoid repetition
         lastDetectedEmotion = detectedEmotion;
         
-        // Display the detected emotion with confidence level
+        // Display the detected emotion
         displayDetectedEmotion(detectedEmotion, confidenceLevel);
     }
     
-    // Display the detected emotion and suggest therapy
-    function displayDetectedEmotion(emotion, confidence = 70) {
+    // Helper function to calculate brightness in a region
+    function calculateRegionBrightness(regionData) {
+        let totalBrightness = 0;
+        for (let i = 0; i < regionData.length; i += 4) {
+            totalBrightness += (regionData[i] + regionData[i+1] + regionData[i+2]) / 3;
+        }
+        return totalBrightness / (regionData.length / 4);
+    }
+    
+    // Helper function to calculate motion level between frames
+    function calculateMotionLevel(currentFrame, previousFrame) {
+        let totalDiff = 0;
+        let significantDiffs = 0;
+        
+        // Sample pixels (every 16 for performance)
+        for (let i = 0; i < currentFrame.length; i += 16) {
+            const diff = Math.abs(currentFrame[i] - previousFrame[i]) + 
+                         Math.abs(currentFrame[i+1] - previousFrame[i+1]) + 
+                         Math.abs(currentFrame[i+2] - previousFrame[i+2]);
+            
+            if (diff > 20) {
+                significantDiffs++;
+                totalDiff += diff;
+            }
+        }
+        
+        const sampledPixels = currentFrame.length / 16;
+        const motionPercent = (significantDiffs / sampledPixels) * 100;
+        return motionPercent;
+    }
+    
+    // Display the detected emotion with improved UI
+    function displayDetectedEmotion(emotion, confidence) {
         // Stop the scanning animation
         videoContainer.classList.remove('scanning');
         
@@ -903,7 +1022,7 @@ function initEmotionTracking() {
         // Show the detected emotion with a nice animation
         resultElement.innerHTML = `
             <strong>Detected Emotion:</strong> ${emotion} 
-            <span class="confidence-level ${confidenceDesc}">(${confidenceDesc} confidence)</span>
+            <span class="confidence-level ${confidenceDesc}">(${confidenceDesc} confidence ${confidence.toFixed(0)}%)</span>
         `;
         resultElement.classList.add('show');
         
@@ -911,7 +1030,50 @@ function initEmotionTracking() {
         suggestTherapy(emotion);
     }
     
-    // Start/stop emotion tracking
+    // Suggest therapy based on emotion
+    function suggestTherapy(emotion) {
+        const therapySuggestion = document.getElementById('therapy-suggestion');
+        
+        let recommendedFrequency = '';
+        let therapyDesc = '';
+        
+        // Match emotions to therapies
+        switch(emotion) {
+            case 'stressed':
+                recommendedFrequency = '432 Hz';
+                therapyDesc = 'calms the nervous system and reduces stress levels';
+                break;
+            case 'sad':
+            case 'tired':
+                recommendedFrequency = '396 Hz';
+                therapyDesc = 'liberates you from negativity and fatigue';
+                break;
+            case 'happy':
+                recommendedFrequency = '528 Hz';
+                therapyDesc = 'enhances your positive state and promotes healing';
+                break;
+            case 'focused':
+                recommendedFrequency = '852 Hz';
+                therapyDesc = 'enhances mental clarity and intuition';
+                break;
+            default:
+                recommendedFrequency = '639 Hz';
+                therapyDesc = 'promotes balance and harmony';
+        }
+        
+        // Show the suggestion
+        therapySuggestion.innerHTML = `
+            <h4>Recommended Sound Therapy:</h4>
+            <p>Based on your emotional state, we recommend <strong>${recommendedFrequency}</strong> which ${therapyDesc}.</p>
+            <a href="#neuroacoustic" class="btn btn-primary btn-sm">Try it now</a>
+        `;
+        therapySuggestion.style.display = 'block';
+        
+        // Also link to the specific therapy in the neuroacoustic section
+        linkEmotionsToTherapy();
+    }
+    
+    // Event listener for start/stop button
     if (startButton) {
         startButton.addEventListener('click', function() {
             if (!emotionDetectionActive) {
@@ -922,19 +1084,16 @@ function initEmotionTracking() {
                         startButton.textContent = 'Stop Emotion Tracking';
                         startButton.classList.add('active');
                         
-                        // Remove inactive class and show face target
+                        // Show the video container and start scanning
                         videoContainer.classList.remove('inactive');
-                        faceTargetOverlay.classList.add('active');
+                        videoContainer.classList.add('scanning');
                         
                         // Reset results
                         resultElement.classList.remove('show');
                         document.getElementById('therapy-suggestion').style.display = 'none';
                         
-                        // Begin emotion detection cycle
-                        setTimeout(() => {
-                            videoContainer.classList.add('scanning');
-                            simulateEmotionDetection();
-                        }, 1000);
+                        // Begin emotion detection
+                        simulateEmotionDetection();
                     })
                     .catch(error => {
                         console.error('Error starting camera:', error);
@@ -946,57 +1105,17 @@ function initEmotionTracking() {
                 stopCamera();
                 startButton.textContent = 'Start Emotion Tracking';
                 startButton.classList.remove('active');
+                
+                // Hide elements
                 videoContainer.classList.remove('scanning');
                 videoContainer.classList.add('inactive');
-                faceTargetOverlay.classList.remove('active');
-                lastDetectedEmotion = null;
+                
+                // Reset UI elements
+                resetAnalysisStages();
+                featurePoints.forEach(point => point.classList.remove('active'));
+                faceDetectionFrame.classList.remove('active');
             }
         });
-    }
-    
-    // Start camera with fade-in effect
-    function startCamera() {
-        return new Promise((resolve, reject) => {
-            // Add transition effect to video container
-            videoContainer.style.opacity = '0.5';
-            
-            // Request camera access
-            navigator.mediaDevices.getUserMedia({ video: true })
-                .then(stream => {
-                    video.srcObject = stream;
-                    
-                    // Animate fade-in
-                    setTimeout(() => {
-                        videoContainer.style.opacity = '1';
-                        resolve();
-                    }, 500);
-                })
-                .catch(error => {
-                    // Fallback for demo: show a static image instead
-                    video.poster = 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=800&q=80';
-                    videoContainer.style.opacity = '1';
-                    console.warn('Camera access not available, using fallback image');
-                    resolve(); // Still resolve for demo purposes
-                });
-        });
-    }
-    
-    // Stop camera with fade-out effect
-    function stopCamera() {
-        // Add transition effect
-        videoContainer.style.opacity = '0.5';
-        
-        // Stop all video tracks
-        if (video.srcObject) {
-            const tracks = video.srcObject.getTracks();
-            tracks.forEach(track => track.stop());
-            video.srcObject = null;
-        }
-        
-        // Fade back in (showing the inactive state)
-        setTimeout(() => {
-            videoContainer.style.opacity = '1';
-        }, 500);
     }
 }
 
